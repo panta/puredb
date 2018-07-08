@@ -17,13 +17,13 @@ const (
 )
 
 type Book struct {
-	Id			int64
+	Id			int64		`puredb:"primary,auto"`
 	Author		string
 	Title		string
-	Year		int
+	Year		int64			`puredb:"index"`
 	Available	bool
 	Price		float64
-	Published	time.Time
+	Published	time.Time	`puredb:"index"`
 }
 
 var BucketOptsIntBook = BucketOpts{
@@ -120,6 +120,13 @@ func TestPureDB(t *testing.T) {
 		Price: 12.34,
 		Published: t1,
 	}
+
+	bookTable, err := db.AddTable("books")
+	panicOnErr(err)
+	_, err = bookTable.Save(&b1)
+	panicOnErr(err)
+	os.Exit(0)
+
 	err = addBook(t, db, &b1)
 	panicOnErr(err)
 

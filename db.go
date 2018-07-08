@@ -12,6 +12,7 @@ type PureDB struct {
 	Pathname string
 
 	buckets buckets
+	tables tables
 }
 
 // use "functional options"
@@ -46,16 +47,19 @@ func Open(pathname string, options ...PureDBOptionFn) (*PureDB, error) {
 	pureDb.DB = badgerDb
 
 	pureDb.buckets.Init(&pureDb)
+	pureDb.tables.Init(&pureDb)
 
 	return &pureDb, nil
 }
 
 func (db *PureDB) Close() {
+	db.tables.Cleanup()
 	db.buckets.Cleanup()
 	db.DB.Close()
 }
 
 func (db *PureDB) Destroy() {
+	db.tables.Cleanup()
 	db.buckets.Cleanup()
 	db.DB.Close()
 	os.RemoveAll(db.Pathname)
@@ -65,11 +69,20 @@ func (db *PureDB) Badger() *badger.DB {
 	return db.DB
 }
 
-func (db *PureDB) AddBucket(name string, opts BucketOpts) error {
+func (db *PureDB) AddBucket(name string, opts BucketOpts) (*Bucket, error) {
 	log.Printf("PureDB::AddBucket - name:%v opts:%v", name, opts)
 	return db.buckets.Add(name, opts)
 }
 
 func (db *PureDB) GetBucket(name string) *Bucket {
 	return db.buckets.Get(name)
+}
+
+func (db *PureDB) AddTable(name string) (*Table, error) {
+	log.Printf("PureDB::AddTable - name:%v", name)
+	return db.tables.Add(name)
+}
+
+func (db *PureDB) GetTable(name string) *Table {
+	return db.tables.Get(name)
 }

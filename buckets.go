@@ -18,17 +18,22 @@ func (buckets *buckets) Cleanup() {
 	}
 }
 
-func (buckets *buckets) Add(name string, opts BucketOpts) error {
+func (buckets *buckets) Add(name string, opts BucketOpts) (*Bucket, error) {
 	log.Printf("buckets::Add name:%v opts:%v", name, opts)
 	bucket := Bucket{}
 	err := bucket.Setup(buckets.DB, name, opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	buckets.Map[name] = &bucket
-	return nil
+	return &bucket, nil
 }
 
 func (buckets *buckets) Get(name string) *Bucket {
 	return buckets.Map[name]
+}
+
+func (buckets *buckets) Has(name string) bool {
+	_, ok := buckets.Map[name]
+	return ok
 }
