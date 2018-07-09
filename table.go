@@ -6,7 +6,6 @@ import (
 	"log"
 	"github.com/dgraph-io/badger"
 	"os"
-	"github.com/vmihailenco/msgpack"
 	"time"
 )
 
@@ -84,26 +83,6 @@ func (table *Table) Save(v interface{}) (int64, error) {
 	if err != nil {
 		return -1, err
 	}
-	//pTyp := reflect.TypeOf(v)
-	//pVal := reflect.ValueOf(v)
-	//log.Printf("[1] typ:%v kind:%v val:%v", pTyp, pTyp.Kind(), pVal)
-	//if pTyp.Kind() != reflect.Ptr {
-	//	return -1, fmt.Errorf("not a pointer")
-	//}
-	//typ := pTyp.Elem()
-	//val := pVal.Elem()
-	//log.Printf("[2] typ:%v kind:%v val:%v", typ, typ.Kind(), val)
-	//if typ.Kind() != reflect.Struct {
-	//	return -1, fmt.Errorf("not a pointer to a struct")
-	//}
-	//
-	//////val := reflect.ValueOf(v)
-	////s := val
-	////typ = s.Type()
-	////log.Printf("typ:%v kind:%v", typ, typ.Kind())
-	////if typ.Kind() != reflect.Struct {
-	////	return -1, fmt.Errorf("not a pointer to a struct")
-	////}
 
 	pVal := reflect.ValueOf(v)
 	val := pVal.Elem()
@@ -122,7 +101,6 @@ func (table *Table) Save(v interface{}) (int64, error) {
 			continue
 		}
 		fieldVal := val.FieldByIndex(index.field.Index)
-		//fieldVal := val.FieldByName(index.field.Name)
 		fmt.Fprintf(os.Stderr, "secondary index %v val:%v index:%v sf:%v\n", index.name, fieldVal, index, index.field)
 		err = index.bucket.Set(fieldVal.Interface(), primaryId)
 		if err != nil {
@@ -130,98 +108,6 @@ func (table *Table) Save(v interface{}) (int64, error) {
 		}
 		fmt.Fprintf(os.Stderr, "adding record to index %v bucket id:%v err:%v\n", index.name, primaryId, err)
 	}
-
-	//for i := 0; i < sInfo.typ.NumField(); i++ {
-	//	fieldVal := val.Field(i)
-	//	structField := sInfo.typ.Field(i)
-	//
-	//	tag, _ := structField.Tag.Lookup("puredb")
-	//	tagOpts := parseTag(tag)
-	//
-	//	fmt.Printf("[%d] fv:%30v sf:%v - %s %s = %v tag:%v\n",
-	//		i, fieldVal, structField,
-	//		structField.Name, fieldVal.Type(), fieldVal.Interface(), tagOpts)
-	//
-	//	fieldName := structField.Name
-	//
-	//	if tagOpts.Has("primary") {
-	//		primaryBucketOpts := BucketOpts{}
-	//		primaryBucketOpts = BucketOptsIntInt
-	//		primaryBucketOpts.PreAddFn = func (bucket *Bucket, k interface{}, v interface{}) error {
-	//			id := k.(int64)
-	//			// reflect.ValueOf(v).Elem().Type().AssignableTo(typ) <=> v.(*myStruct)
-	//			if ! reflect.ValueOf(v).Elem().Type().AssignableTo(typ) {
-	//				return fmt.Errorf("value doesn't implement pointer to (specified) struct interface")
-	//			}
-	//
-	//			//typ := reflect.TypeOf(v).Elem()
-	//			val := reflect.ValueOf(v).Elem()
-	//			idFieldVal := val.FieldByName(fieldName)
-	//			if idFieldVal.CanSet() {
-	//				fmt.Fprintf(os.Stderr, "PreAddFn set id:%v OK\n", id)
-	//				idFieldVal.SetInt(id)
-	//			} else {
-	//				return fmt.Errorf("id field can't be set")
-	//			}
-	//			return nil
-	//		}
-	//		primaryBucketOpts.MarshalValueFn = func (v interface{}) ([]byte, error) {
-	//			fmt.Fprintf(os.Stderr, "Marshaling struct v:%v...\n", v)
-	//			if ! reflect.ValueOf(v).Elem().Type().AssignableTo(typ) {
-	//				return []byte{}, fmt.Errorf("value doesn't implement pointer to (specified) struct interface")
-	//			}
-	//			pVal := reflect.ValueOf(v)
-	//			// pVal.Interface() <=> v.(*myStruct)
-	//			fmt.Fprintf(os.Stderr, "Marshalling struct v:%v from interface:%v\n", v, pVal.Interface())
-	//			return msgpack.Marshal(pVal.Interface())
-	//		}
-	//		primaryBucketOpts.UnmarshalValueFn = func (data []byte, v *interface{}) error {
-	//			fmt.Fprintf(os.Stderr, "Unmarshaling struct...\n")
-	//			structPtr := reflect.New(typ)
-	//			err := msgpack.Unmarshal(data, structPtr.Interface())
-	//			// XXX TODO: perform post-hydration logic
-	//			if err != nil {
-	//				return err
-	//			}
-	//			*v = structPtr.Elem().Interface()
-	//			fmt.Fprintf(os.Stderr, "Unmarshaled struct v:%v\n", *v)
-	//			return nil
-	//		}
-	//		fmt.Fprintf(os.Stderr, "going to add record to primary bucket v:%v...\n", v)
-	//		bucket := table.GetOrCreateBucket(structField.Name, primaryBucketOpts)
-	//		primaryId, err = bucket.Add(v)
-	//		fmt.Fprintf(os.Stderr, "adding record to primary bucket v:%v id:%v err:%v\n", v, primaryId, err)
-	//		if err != nil {
-	//			return -1, err
-	//		}
-	//	} else if tagOpts.Has("index") {
-	//		indexBucketOpts := BucketOpts{}
-	//		indexBucketOpts = BucketOptsIntInt
-	//
-	//		if fieldVal.Type() == reflect.TypeOf(time.Time{}) {
-	//			indexBucketOpts.MarshalKeyFn = func (v interface{}) ([]byte, error) {
-	//				t, ok := v.(time.Time)
-	//				if ! ok {
-	//					return nil, fmt.Errorf("not a valid time object: %v", v)
-	//				}
-	//				return t.MarshalBinary()
-	//			}
-	//			indexBucketOpts.UnmarshalKeyFn = func (data []byte, v *interface{}) error {
-	//				t := time.Time{}.UTC()
-	//				err := t.UnmarshalBinary(data)
-	//				if err != nil {
-	//					return err
-	//				}
-	//				*v = t
-	//				return nil
-	//			}
-	//		}
-	//		fmt.Fprintf(os.Stderr, "going to add record to index %v bucket id:%v (value %v)...\n", fieldName, primaryId, fieldVal.Interface())
-	//		bucket := table.GetOrCreateBucket(structField.Name, indexBucketOpts)
-	//		err = bucket.Set(fieldVal.Interface(), primaryId)
-	//		fmt.Fprintf(os.Stderr, "adding record to index %v bucket id:%v err:%v\n", fieldName, primaryId, err)
-	//	}
-	//}
 
 	return primaryId, nil
 }
@@ -275,7 +161,6 @@ func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
 
 		if tagOpts.Has("primary") {
 			primaryBucketOpts := BucketOpts{}
-			primaryBucketOpts = BucketOptsIntInt
 			primaryBucketOpts.PreAddFn = func (bucket *Bucket, k interface{}, v interface{}) error {
 				id := k.(int64)
 				// reflect.ValueOf(v).Elem().Type().AssignableTo(typ) <=> v.(*myStruct)
@@ -294,28 +179,6 @@ func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
 				}
 				return nil
 			}
-			primaryBucketOpts.MarshalValueFn = func (v interface{}) ([]byte, error) {
-				fmt.Fprintf(os.Stderr, "Marshaling struct v:%v...\n", v)
-				if ! reflect.ValueOf(v).Elem().Type().AssignableTo(typ) {
-					return []byte{}, fmt.Errorf("value doesn't implement pointer to (specified) struct interface")
-				}
-				pVal := reflect.ValueOf(v)
-				// pVal.Interface() <=> v.(*myStruct)
-				fmt.Fprintf(os.Stderr, "Marshalling struct v:%v from interface:%v\n", v, pVal.Interface())
-				return msgpack.Marshal(pVal.Interface())
-			}
-			primaryBucketOpts.UnmarshalValueFn = func (data []byte, v *interface{}) error {
-				fmt.Fprintf(os.Stderr, "Unmarshaling struct...\n")
-				structPtr := reflect.New(typ)
-				err := msgpack.Unmarshal(data, structPtr.Interface())
-				// XXX TODO: perform post-hydration logic
-				if err != nil {
-					return err
-				}
-				*v = structPtr.Elem().Interface()
-				fmt.Fprintf(os.Stderr, "Unmarshaled struct v:%v\n", *v)
-				return nil
-			}
 			fmt.Fprintf(os.Stderr, "going to add record to primary bucket v:%v...\n", v)
 			bucket := table.GetOrCreateBucket(structField.Name, primaryBucketOpts)
 			primaryIndex := indexInfo{
@@ -332,28 +195,8 @@ func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
 			fmt.Fprintf(os.Stderr, "setup primary index %v %v bucket:%v\n", fieldName, primaryIndex, bucket.Name)
 		} else if tagOpts.Has("index") {
 			indexBucketOpts := BucketOpts{}
-			indexBucketOpts = BucketOptsIntInt
 
 			fmt.Fprintf(os.Stderr, "setup secondary index %v type:%v\n", fieldName, fieldVal.Type())
-			if fieldVal.Type() == reflect.TypeOf(time.Time{}) {
-				fmt.Fprintf(os.Stderr, "secondary index %v is time.Time\n", fieldName)
-				indexBucketOpts.MarshalKeyFn = func (v interface{}) ([]byte, error) {
-					t, ok := v.(time.Time)
-					if ! ok {
-						return nil, fmt.Errorf("not a valid time object: %v", v)
-					}
-					return t.MarshalBinary()
-				}
-				indexBucketOpts.UnmarshalKeyFn = func (data []byte, v *interface{}) error {
-					t := time.Time{}.UTC()
-					err := t.UnmarshalBinary(data)
-					if err != nil {
-						return err
-					}
-					*v = t
-					return nil
-				}
-			}
 			bucket := table.GetOrCreateBucket(structField.Name, indexBucketOpts)
 			secondaryIndex := indexInfo{
 				name:		fieldName,

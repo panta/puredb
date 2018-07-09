@@ -5,7 +5,6 @@ import (
 	"os"
 	"io/ioutil"
 	"time"
-	"encoding/binary"
 	"github.com/vmihailenco/msgpack"
 	"reflect"
 	"log"
@@ -26,27 +25,19 @@ type Book struct {
 	Published	time.Time	`puredb:"index"`
 }
 
-var BucketOptsIntBook = BucketOpts{
-	MarshalKeyFn: func (v interface{}) ([]byte, error) {
-		return i64tob(v.(int64)), nil
-	},
-	UnmarshalKeyFn: func (data []byte, v *interface{}) error {
-		*v = int64(binary.BigEndian.Uint64(data))
-		return nil
-	},
-	MarshalValueFn: func (v interface{}) ([]byte, error) {
-		return msgpack.Marshal(v.(*Book))
-	},
-	UnmarshalValueFn: func (data []byte, v *interface{}) error {
-		book := Book{}
-		err := msgpack.Unmarshal(data, &book)
-		book.Published = book.Published.UTC()	// for https://github.com/vmihailenco/msgpack/issues/39
-		if err != nil {
-			return err
-		}
-		*v = book
-		return nil
-	},
+func (book *Book) Marshal() ([]byte, error) {
+	b := book
+	b.Published = b.Published.UTC()
+	return msgpack.Marshal(b)
+}
+
+func (book *Book) Unmarshal(data []byte) (error) {
+	err := msgpack.Unmarshal(data, book)
+	if err != nil {
+		return err
+	}
+	book.Published = book.Published.UTC()
+	return nil
 }
 
 func addBook(t *testing.T, db *PureDB, book *Book) error {
@@ -61,13 +52,13 @@ func addBook(t *testing.T, db *PureDB, book *Book) error {
 		return err
 	}
 
-	retrieved, err := db.GetBucket(bucket_id_book).Get(id)
+	retrieved_book := Book{}
+	err = db.GetBucket(bucket_id_book).Get(id, &retrieved_book)
 	if err != nil {
 		t.Fatalf("can't get back record from id (%v) err:%v", id, err)
 		return err
 	}
 
-	retrieved_book := retrieved.(Book)
 	if id != retrieved_book.Id {
 		t.Fatalf("wrong id in retrieved record (expected %v found %v)", id, retrieved_book.Id)
 		return err
@@ -78,13 +69,14 @@ func addBook(t *testing.T, db *PureDB, book *Book) error {
 		return err
 	}
 
-	id_i, err := db.GetBucket(bucket_published_id).Get(retrieved_book.Published)
+	id_i := int64(-1)
+	err = db.GetBucket(bucket_published_id).Get(retrieved_book.Published, &id_i)
 	if err != nil {
 		t.Fatalf("can't get record from %v (published %v) - err:%v", bucket_published_id, retrieved_book.Published, err)
 		return err
 	}
 
-	if id_i.(int64) != id {
+	if id_i != id {
 		t.Fatalf("id from %v (%v) differs from primary id (%v)", bucket_published_id, id_i, id)
 		return err
 	}
@@ -97,7 +89,6 @@ func TestPureDB(t *testing.T) {
 	defer db.Destroy()
 
 	id_book_opts := BucketOpts{}
-	id_book_opts = BucketOptsIntBook
 	id_book_opts.PreAddFn = func (bucket *Bucket, k interface{}, v interface{}) error {
 		id := k.(int64)
 		lpr := v.(*Book)
@@ -106,8 +97,8 @@ func TestPureDB(t *testing.T) {
 	}
 
 	db.AddBucket(bucket_id_book, id_book_opts)
-	db.AddBucket(bucket_published_id, BucketOptsTimeInt)
-	//db.AddBucket(bucket_year_id, BucketOptsIntInt)
+	db.AddBucket(bucket_published_id, BucketOpts{})
+	//db.AddBucket(bucket_year_id, BucketOpts{})
 
 	t1, err := time.Parse(time.RFC3339, "1623-01-01T10:00:00Z")
 	panicOnErr(err)
@@ -125,7 +116,8 @@ func TestPureDB(t *testing.T) {
 	panicOnErr(err)
 	_, err = bookTable.Save(&b1)
 	panicOnErr(err)
-	os.Exit(0)
+	_, err = bookTable.Save(&b1)
+	//os.Exit(0)
 
 	err = addBook(t, db, &b1)
 	panicOnErr(err)
@@ -189,14 +181,13 @@ func TestPureDB(t *testing.T) {
 	it := NewBucketIter(db.GetBucket(bucket_published_id), BucketIterOpts{})
 	i := 0
 	for it.Rewind(); it.Valid(); it.Next() {
-		var key interface{}
-		var value interface{}
-
-		err = it.Get(&key, &value)
+		key := time.Time{}
+		id := int64(-1)
+		err = it.Get(&key, &id)
 		if err != nil {
 			t.Fatalf("in iteration on %v - err:%v", bucket_published_id, err)
 		}
-		log.Printf("%v [%v]  key:%v  id:%v", bucket_published_id, i, key, value)
+		log.Printf("%v [%v]  key:%v  id:%v", bucket_published_id, i, key, id)
 		i++
 	}
 }

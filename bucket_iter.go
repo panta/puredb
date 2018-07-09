@@ -75,7 +75,7 @@ func (it *BucketIter) Error() bool {
 	return it.Err != nil
 }
 
-func (it *BucketIter) Get(keyp *interface{}, valuep *interface{}) error {
+func (it *BucketIter) Get(keyp interface{}, valuep interface{}) error {
 	item := it.it.Item()
 	k_prefixed := item.Key()
 	v_b, err := item.Value()
@@ -86,12 +86,12 @@ func (it *BucketIter) Get(keyp *interface{}, valuep *interface{}) error {
 
 	k_b := k_prefixed[len(it.prefix):]
 
-	err = it.bucket.UnmarshalKey(k_b, keyp)
+	err = Unmarshal(k_b, keyp)
 	if err != nil {
 		it.Err = err
 		return err
 	}
-	err = it.bucket.UnmarshalValue(v_b, valuep)
+	err = Unmarshal(v_b, valuep)
 	if err != nil {
 		it.Err = err
 		return err
@@ -114,12 +114,12 @@ func (it *BucketIter) Find(value interface{}, cmpFn BucketPredicate, keyp *inter
 
 		var k_i interface{}
 		var v_i interface{}
-		err = it.bucket.UnmarshalKey(k_b, &k_i)
+		err = Unmarshal(k_b, &k_i)
 		if err != nil {
 			it.Err = err
 			return false, err
 		}
-		err = it.bucket.UnmarshalValue(v_b, &v_i)
+		err = Unmarshal(v_b, &v_i)
 		if err != nil {
 			it.Err = err
 			return false, err

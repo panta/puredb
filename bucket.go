@@ -4,23 +4,15 @@ import (
 	"github.com/dgraph-io/badger"
 	"fmt"
 	"encoding/binary"
-	"time"
 	"log"
 )
 
-
-type MarshalFn func(v interface{}) ([]byte, error)
-type UnmarshalFn func(data []byte, v *interface{}) error
 
 type BucketCallback func(bucket *Bucket, k interface{}, v interface{}) error
 
 type BucketPredicate func(bucket *Bucket, k interface{}, v interface{}) (bool, error)
 
 type BucketOpts struct {
-	MarshalKeyFn     MarshalFn
-	UnmarshalKeyFn   UnmarshalFn
-	MarshalValueFn   MarshalFn
-	UnmarshalValueFn UnmarshalFn
 	PreAddFn         BucketCallback
 }
 
@@ -66,11 +58,6 @@ type Bucket struct {
 	Name string
 	Opts BucketOpts
 	Seq  *badger.Sequence
-
-	MarshalKeyFn MarshalFn
-	UnmarshalKeyFn UnmarshalFn
-	MarshalValueFn MarshalFn
-	UnmarshalValueFn UnmarshalFn
 }
 
 func (bucket *Bucket) Badger() *badger.DB {
@@ -86,11 +73,6 @@ func (bucket *Bucket) Setup(db *PureDB, name string, opts BucketOpts) error {
 	seq, err := bucket.badgerDB.GetSequence([]byte(bucket.Name), 100)
 	bucket.Seq = seq
 
-	bucket.MarshalKeyFn = bucket.Opts.MarshalKeyFn
-	bucket.UnmarshalKeyFn = bucket.Opts.UnmarshalKeyFn
-	bucket.MarshalValueFn = bucket.Opts.MarshalValueFn
-	bucket.UnmarshalValueFn = bucket.Opts.UnmarshalValueFn
-
 	return err
 }
 
@@ -105,22 +87,6 @@ func (bucket *Bucket) GetName() string {
 
 func (bucket *Bucket) GetOpts() *BucketOpts {
 	return &bucket.Opts
-}
-
-func (bucket *Bucket) MarshalKey(v interface{}) ([]byte, error) {
-	return bucket.MarshalKeyFn(v)
-}
-
-func (bucket *Bucket) UnmarshalKey(data []byte, v *interface{}) error {
-	return bucket.UnmarshalKeyFn(data, v)
-}
-
-func (bucket *Bucket) MarshalValue(v interface{}) ([]byte, error) {
-	return bucket.MarshalValueFn(v)
-}
-
-func (bucket *Bucket) UnmarshalValue(data []byte, v *interface{}) error {
-	return bucket.UnmarshalValueFn(data, v)
 }
 
 func (bucket *Bucket) Add(v interface{}) (int64, error) {
@@ -146,7 +112,7 @@ func (bucket *Bucket) Add(v interface{}) (int64, error) {
 			}
 		}
 
-		v_b, err := bucket.MarshalValue(v)
+		v_b, err := Marshal(v)
 		if err != nil {
 			return err
 		}
@@ -162,11 +128,11 @@ func (bucket *Bucket) Set(k interface{}, v interface{}) error {
 
 	err := db.Update(func(txn *badger.Txn) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
-		k_b, err := bucket.MarshalKey(k)
+		k_b, err := Marshal(k)
 		if err != nil {
 			return err
 		}
-		v_b, err := bucket.MarshalValue(v)
+		v_b, err := Marshal(v)
 		if err != nil {
 			return err
 		}
@@ -177,14 +143,13 @@ func (bucket *Bucket) Set(k interface{}, v interface{}) error {
 	return err
 }
 
-func (bucket *Bucket) Get(k interface{}) (interface{}, error) {
+func (bucket *Bucket) Get(k interface{}, v interface{}) error {
 	db := bucket.badgerDB
 
-	k_b, err := bucket.MarshalKey(k)
+	k_b, err := Marshal(k)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	var v interface{}
 
 	err = db.View(func(txn *badger.Txn) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
@@ -198,20 +163,20 @@ func (bucket *Bucket) Get(k interface{}) (interface{}, error) {
 			return err
 		}
 
-		err = bucket.UnmarshalValue(v_b, &v)
+		err = Unmarshal(v_b, v)
 		if err != nil {
 			return err
 		}
 		return nil
 	})
 
-	return v, err
+	return err
 }
 
 func (bucket *Bucket) Delete(k interface{}) error {
 	db := bucket.badgerDB
 
-	k_b, err := bucket.MarshalKey(k)
+	k_b, err := Marshal(k)
 	if err != nil {
 		return err
 	}
@@ -260,11 +225,11 @@ func (bucket *Bucket) Pop(last bool) (interface{}, interface{}, error) {
 
 		k_b := k_prefixed[len(prefix):]
 
-		err = bucket.UnmarshalKey(k_b, &k)
+		err = Unmarshal(k_b, &k)
 		if err != nil {
 			return err
 		}
-		err = bucket.UnmarshalValue(v_b, &v)
+		err = Unmarshal(v_b, &v)
 		if err != nil {
 			return err
 		}
@@ -298,11 +263,11 @@ func (bucket *Bucket) Iterate(fn BucketCallback) error {
 
 			var k_i interface{}
 			var v_i interface{}
-			err = bucket.UnmarshalKey(k_b, &k_i)
+			err = Unmarshal(k_b, &k_i)
 			if err != nil {
 				return err
 			}
-			err = bucket.UnmarshalValue(v_b, &v_i)
+			err = Unmarshal(v_b, &v_i)
 			if err != nil {
 				return err
 			}
@@ -347,11 +312,11 @@ func (bucket *Bucket) First() (interface{}, interface{}, error) {
 
 		k_b := k_prefixed[len(prefix):]
 
-		err = bucket.UnmarshalKey(k_b, &first_k)
+		err = Unmarshal(k_b, &first_k)
 		if err != nil {
 			return err
 		}
-		err = bucket.UnmarshalValue(v_b, &first_v)
+		err = Unmarshal(v_b, &first_v)
 		if err != nil {
 			return err
 		}
@@ -393,11 +358,11 @@ func (bucket *Bucket) Last() (interface{}, interface{}, error) {
 
 		k_b := k_prefixed[len(prefix):]
 
-		err = bucket.UnmarshalKey(k_b, &last_k)
+		err = Unmarshal(k_b, &last_k)
 		if err != nil {
 			return err
 		}
-		err = bucket.UnmarshalValue(v_b, &last_v)
+		err = Unmarshal(v_b, &last_v)
 		if err != nil {
 			return err
 		}
@@ -433,11 +398,11 @@ func (bucket *Bucket) Search(v interface{}, fn BucketCallback) (interface{}, err
 
 			var k_i interface{}
 			var v_i interface{}
-			err = bucket.UnmarshalKey(k_b, &k_i)
+			err = Unmarshal(k_b, &k_i)
 			if err != nil {
 				return err
 			}
-			err = bucket.UnmarshalValue(v_b, &v_i)
+			err = Unmarshal(v_b, &v_i)
 			if err != nil {
 				return err
 			}
@@ -489,11 +454,11 @@ func (bucket *Bucket) SearchOne(v interface{}, cmpFn BucketPredicate, reverse bo
 
 			var k_i interface{}
 			var v_i interface{}
-			err = bucket.UnmarshalKey(k_b, &k_i)
+			err = Unmarshal(k_b, &k_i)
 			if err != nil {
 				return err
 			}
-			err = bucket.UnmarshalValue(v_b, &v_i)
+			err = Unmarshal(v_b, &v_i)
 			if err != nil {
 				return err
 			}
@@ -554,11 +519,11 @@ func (bucket *Bucket) SearchAll(v interface{}, cmpFn BucketPredicate, reverse bo
 
 			var k_i interface{}
 			var v_i interface{}
-			err = bucket.UnmarshalKey(k_b, &k_i)
+			err = Unmarshal(k_b, &k_i)
 			if err != nil {
 				return err
 			}
-			err = bucket.UnmarshalValue(v_b, &v_i)
+			err = Unmarshal(v_b, &v_i)
 			if err != nil {
 				return err
 			}
@@ -654,64 +619,6 @@ func u64tob(v uint64) []byte {
 	b := make([]byte, 8)
 	binary.BigEndian.PutUint64(b, v)
 	return b
-}
-
-var BucketOptsIntInt = BucketOpts{
-	MarshalKeyFn: func (v interface{}) ([]byte, error) {
-		return i64tob(v.(int64)), nil
-	},
-	UnmarshalKeyFn: func (data []byte, v *interface{}) error {
-		*v = int64(binary.BigEndian.Uint64(data))
-		return nil
-	},
-	MarshalValueFn: func (v interface{}) ([]byte, error) {
-		return i64tob(v.(int64)), nil
-	},
-	UnmarshalValueFn: func (data []byte, v *interface{}) error {
-		*v = int64(binary.BigEndian.Uint64(data))
-		return nil
-	},
-}
-
-var BucketOptsTimeInt = BucketOpts{
-	MarshalKeyFn: func (v interface{}) ([]byte, error) {
-		t, ok := v.(time.Time)
-		if ! ok {
-			return nil, fmt.Errorf("not a valid time object: %v", v)
-		}
-		//// WARNING: time.RFC3339Nano is not suibucket because it has variable length!
-		//frac_ns := fmt.Sprintf("%09d", t.Nanosecond())
-		//val := []byte(fmt.Sprintf("%s$%s", t.Format(time.RFC3339), frac_ns))
-		//return val, nil
-		return t.MarshalBinary()
-	},
-	UnmarshalKeyFn: func (data []byte, v *interface{}) error {
-		//s := string(data)
-		//
-		//ss := strings.SplitN(s, "$", 2)
-		//t_base, err := time.Parse(time.RFC3339, ss[0])
-		//if err != nil {
-		//	return err
-		//}
-		//frac_ns, _ := strconv.ParseInt(ss[1], 10, 64)
-		//t := t_base.Add(time.Nanosecond * time.Duration(frac_ns))
-		//*v = t
-		//return nil
-		t := time.Time{}.UTC()
-		err := t.UnmarshalBinary(data)
-		if err != nil {
-			return err
-		}
-		*v = t
-		return nil
-	},
-	MarshalValueFn: func (v interface{}) ([]byte, error) {
-		return i64tob(v.(int64)), nil
-	},
-	UnmarshalValueFn: func (data []byte, v *interface{}) error {
-		*v = int64(binary.BigEndian.Uint64(data))
-		return nil
-	},
 }
 
 func prefixBeyondEnd(prefix []byte) []byte {
