@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"github.com/dgraph-io/badger"
-	"os"
 )
 
 type Table struct {
@@ -77,8 +76,6 @@ func (table *Table) GetOrCreateBucket(name string, opts BucketOpts) *Bucket {
 }
 
 func (table *Table) Save(v interface{}) (int64, error) {
-	log.Printf("PureDB.Save(%v)", v)
-
 	sInfo, err := table.getStructInfo(v)
 	if err != nil {
 		return -1, err
@@ -113,7 +110,6 @@ func (table *Table) Save(v interface{}) (int64, error) {
 	}
 
 	primaryId, err = sInfo.primary.bucket.Add(v)
-	fmt.Fprintf(os.Stderr, "adding record to primary bucket v:%v id:%v err:%v\n", v, primaryId, err)
 	if err != nil {
 		return -1, err
 	}
@@ -123,12 +119,10 @@ func (table *Table) Save(v interface{}) (int64, error) {
 			continue
 		}
 		fieldVal := val.FieldByIndex(index.field.Index)
-		fmt.Fprintf(os.Stderr, "secondary index %v val:%v index:%v sf:%v\n", index.name, fieldVal, index, index.field)
 		err = index.bucket.Set(fieldVal.Interface(), primaryId)
 		if err != nil {
 			return -1, err
 		}
-		fmt.Fprintf(os.Stderr, "adding record to index %v bucket id:%v err:%v\n", index.name, primaryId, err)
 	}
 
 	return primaryId, nil
@@ -136,14 +130,12 @@ func (table *Table) Save(v interface{}) (int64, error) {
 
 func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
 	pTyp := reflect.TypeOf(v)
-	pVal := reflect.ValueOf(v)
-	log.Printf("[1] typ:%v kind:%v val:%v", pTyp, pTyp.Kind(), pVal)
+	//pVal := reflect.ValueOf(v)
 	if pTyp.Kind() != reflect.Ptr {
 		return nil, fmt.Errorf("not a pointer")
 	}
 	typ := pTyp.Elem()
-	val := pVal.Elem()
-	log.Printf("[2] typ:%v kind:%v val:%v", typ, typ.Kind(), val)
+	//val := pVal.Elem()
 	if typ.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("not a pointer to a struct")
 	}
@@ -166,7 +158,6 @@ func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
 	table.structInfo = sInfo
 
 	for i := 0; i < typ.NumField(); i++ {
-		fieldVal := val.Field(i)
 		structField := typ.Field(i)
 
 		fieldName := structField.Name
@@ -176,10 +167,6 @@ func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
 
 		tag, _ := structField.Tag.Lookup("puredb")
 		tagOpts := parseTag(tag)
-
-		fmt.Printf("[%d] fv:%30v sf:%v - %s %s = %v tag:%v\n",
-			i, fieldVal, structField,
-			structField.Name, fieldVal.Type(), fieldVal.Interface(), tagOpts)
 
 		if tagOpts.Has("primary") {
 			primaryBucketOpts := BucketOpts{}
@@ -194,14 +181,12 @@ func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
 				val := reflect.ValueOf(v).Elem()
 				idFieldVal := val.FieldByName(fieldName)
 				if idFieldVal.CanSet() {
-					fmt.Fprintf(os.Stderr, "PreAddFn set id:%v OK\n", id)
 					idFieldVal.SetInt(id)
 				} else {
 					return fmt.Errorf("id field can't be set")
 				}
 				return nil
 			}
-			fmt.Fprintf(os.Stderr, "going to add record to primary bucket v:%v...\n", v)
 			bucket := table.GetOrCreateBucket(structField.Name, primaryBucketOpts)
 			primaryIndex := indexInfo{
 				name:		fieldName,
@@ -215,12 +200,10 @@ func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
 			sInfo.primary = &primaryIndex
 			sInfo.indexes = append(sInfo.indexes, &primaryIndex)
 			sInfo.indexByName[fieldName] = &primaryIndex
-			fmt.Fprintf(os.Stderr, "setup primary index %v %v bucket:%v\n", fieldName, primaryIndex, bucket.Name)
 		} else if tagOpts.Has("index") {
 			indexBucketOpts := BucketOpts{}
 
 			int64Type := reflect.TypeOf(int64(-1))
-			fmt.Fprintf(os.Stderr, "setup secondary index %v type:%v\n", fieldName, fieldVal.Type())
 			bucket := table.GetOrCreateBucket(structField.Name, indexBucketOpts)
 			secondaryIndex := indexInfo{
 				name:		fieldName,
@@ -233,7 +216,6 @@ func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
 			}
 			sInfo.indexes = append(sInfo.indexes, &secondaryIndex)
 			sInfo.indexByName[fieldName] = &secondaryIndex
-			fmt.Fprintf(os.Stderr, "setup index %v %v bucket:%v\n", fieldName, secondaryIndex, bucket.Name)
 		}
 	}
 
@@ -267,7 +249,6 @@ func (tables *tables) Cleanup() {
 }
 
 func (tables *tables) Add(name string) (*Table, error) {
-	log.Printf("tables::Add name:%v", name)
 	table := Table{}
 	err := table.Setup(tables.DB, name)
 	if err != nil {

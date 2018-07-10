@@ -70,7 +70,6 @@ func (db *PureDB) Badger() *badger.DB {
 }
 
 func (db *PureDB) AddBucket(name string, opts BucketOpts) (*Bucket, error) {
-	log.Printf("PureDB::AddBucket - name:%v opts:%v", name, opts)
 	return db.buckets.Add(name, opts)
 }
 
@@ -79,7 +78,6 @@ func (db *PureDB) GetBucket(name string) *Bucket {
 }
 
 func (db *PureDB) AddTable(name string) (*Table, error) {
-	log.Printf("PureDB::AddTable - name:%v", name)
 	return db.tables.Add(name)
 }
 

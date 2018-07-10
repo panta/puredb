@@ -1,7 +1,5 @@
 package puredb
 
-import "log"
-
 type buckets struct {
 	DB	*PureDB
 	Map	map[string]*Bucket
@@ -19,7 +17,6 @@ func (buckets *buckets) Cleanup() {
 }
 
 func (buckets *buckets) Add(name string, opts BucketOpts) (*Bucket, error) {
-	log.Printf("buckets::Add name:%v opts:%v", name, opts)
 	bucket := Bucket{}
 	err := bucket.Setup(buckets.DB, name, opts)
 	if err != nil {
