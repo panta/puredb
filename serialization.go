@@ -71,10 +71,10 @@ func Marshal(v interface{}) ([]byte, error) {
 		return (*c).MarshalBinary()
 
 	default:
-		return []byte{}, fmt.Errorf("value not supported by Marshal v:%v type:%v", v, reflect.TypeOf(v).Elem())
+		return []byte{}, fmt.Errorf("value not supported by Marshal v:%v type:%v (%v)", v, reflect.TypeOf(v), reflect.TypeOf(v).String())
 	}
 
-	return []byte{}, fmt.Errorf("value not supported by Marshal v:%v type:%v", v, reflect.TypeOf(v).Elem())
+	return []byte{}, fmt.Errorf("value not supported by Marshal v:%v type:%v (%v)", v, reflect.TypeOf(v), reflect.TypeOf(v).String())
 }
 
 func Unmarshal(data []byte, v interface{}) (error) {
@@ -141,9 +141,9 @@ func Unmarshal(data []byte, v interface{}) (error) {
 		return (*c).UnmarshalBinary(data)
 
 	default:
-		return fmt.Errorf("value not supported by Unmarshal v:%v type:%v", v, reflect.TypeOf(v).Elem())
+		return fmt.Errorf("value not supported by Unmarshal v:%v type:%v (%v)", v, reflect.TypeOf(v), reflect.TypeOf(v).String())
 	}
 
-	return fmt.Errorf("value not supported by Unmarshal v:%v type:%v", v, reflect.TypeOf(v).Elem())
+	return fmt.Errorf("value not supported by Unmarshal v:%v type:%v (%v)", v, reflect.TypeOf(v), reflect.TypeOf(v).String())
 }
 
