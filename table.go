@@ -36,6 +36,7 @@ type indexInfo struct {
 	primary		bool
 	unique		bool
 	field		*reflect.StructField
+	valueType	*reflect.Type
 	bucketOpts	BucketOpts
 	bucket		*Bucket
 }
@@ -185,6 +186,7 @@ func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
 				primary:	true,
 				unique:		true,
 				field:		&structField,
+				valueType:  &typ,
 				bucketOpts:	primaryBucketOpts,
 				bucket:		bucket,
 			}
@@ -195,13 +197,15 @@ func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
 		} else if tagOpts.Has("index") {
 			indexBucketOpts := BucketOpts{}
 
+			int64Type := reflect.TypeOf(int64(-1))
 			fmt.Fprintf(os.Stderr, "setup secondary index %v type:%v\n", fieldName, fieldVal.Type())
 			bucket := table.GetOrCreateBucket(structField.Name, indexBucketOpts)
 			secondaryIndex := indexInfo{
 				name:		fieldName,
 				primary:	false,
-				unique:		false,
+				unique:		tagOpts.Has("unique"),
 				field:		&structField,
+				valueType:  &int64Type,
 				bucketOpts:	indexBucketOpts,
 				bucket:		bucket,
 			}
