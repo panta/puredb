@@ -47,6 +47,18 @@ func Marshal(v interface{}) ([]byte, error) {
 	case *int64:
 		return i64tob(*c), nil
 
+	case int:		// cast to int64
+		return i64tob(int64(c)), nil
+
+	case *int:		// cast to int64
+		return i64tob(int64(*c)), nil
+
+	case uint:		// cast to uint64
+		return u64tob(uint64(c)), nil
+
+	case *uint:		// cast to uint64
+		return u64tob(uint64(*c)), nil
+
 	case float32, *float32, []float32,
 	float64, *float64, []float64,
 	bool, *bool, []bool,
@@ -115,6 +127,22 @@ func Unmarshal(data []byte, v interface{}) (error) {
 
 	case *int64:
 		*c = int64(binary.BigEndian.Uint64(data))
+		return nil
+
+	case int:
+		c = int(binary.BigEndian.Uint64(data))
+		return nil
+
+	case *int:
+		*c = int(binary.BigEndian.Uint64(data))
+		return nil
+
+	case uint:
+		c = uint(binary.BigEndian.Uint64(data))
+		return nil
+
+	case *uint:
+		*c = uint(binary.BigEndian.Uint64(data))
 		return nil
 
 	case float32, *float32, []float32,
