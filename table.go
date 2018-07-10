@@ -6,7 +6,6 @@ import (
 	"log"
 	"github.com/dgraph-io/badger"
 	"os"
-	"time"
 )
 
 type Table struct {
