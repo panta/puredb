@@ -19,10 +19,10 @@ type Book struct {
 	Id			int64		`puredb:"primary,auto"`
 	Author		string
 	Title		string
-	Year		int			`puredb:"index,unique"`
+	Year		int			`puredb:"index"`
 	Available	bool
 	Price		float64
-	Published	time.Time	`puredb:"index"`
+	Published	time.Time	`puredb:"index,unique"`
 }
 
 func (book *Book) Marshal() ([]byte, error) {
@@ -193,6 +193,8 @@ func TestTables(t *testing.T) {
 		t.Fatalf("adding table - err:%v", err)
 	}
 
+	t_start := time.Now()
+
 	t1, err := time.Parse(time.RFC3339, "1623-01-01T10:00:00Z")
 	panicOnErr(err)
 	b1 := Book{
@@ -221,53 +223,153 @@ func TestTables(t *testing.T) {
 		t.Fatalf("no error when adding duplicate, expected integrity error")
 	}
 
-	//t2, err := time.Parse(time.RFC3339, "1719-01-01T10:00:00Z")
-	//panicOnErr(err)
-	//b2 := Book{
-	//	Id: -1,
-	//	Author: "Daniel Defoe",
-	//	Title: "Robinson Crusoe",
-	//	Year: 1719,
-	//	Available: true,
-	//	Price: 17.99,
-	//	Published: t2,
-	//}
-	//
-	//t3, err := time.Parse(time.RFC3339, "1500-01-01T10:00:00Z")
-	//panicOnErr(err)
-	//b3 := Book{
-	//	Id: -1,
-	//	Author: "AAAA AAAA",
-	//	Title: "AAAA",
-	//	Year: 1500,
-	//	Available: true,
-	//	Price: 1.99,
-	//	Published: t3,
-	//}
-	//
-	//t4, err := time.Parse(time.RFC3339, "1200-01-01T10:00:00Z")
-	//panicOnErr(err)
-	//b4 := Book{
-	//	Id: -1,
-	//	Author: "BBBB BBBB",
-	//	Title: "BBBB",
-	//	Year: 1200,
-	//	Available: true,
-	//	Price: 1.99,
-	//	Published: t4,
-	//}
-	//
-	//t5, err := time.Parse(time.RFC3339, "1200-01-01T09:00:00Z")
-	//panicOnErr(err)
-	//b5 := Book{
-	//	Id: -1,
-	//	Author: "CCCC CCCC",
-	//	Title: "CCCC",
-	//	Year: 1200,
-	//	Available: true,
-	//	Price: 1.99,
-	//	Published: t5,
-	//}
+	t2, err := time.Parse(time.RFC3339, "1719-01-01T10:00:00Z")
+	panicOnErr(err)
+	b2 := Book{
+		Id: -1,
+		Author: "Daniel Defoe",
+		Title: "Robinson Crusoe",
+		Year: 1719,
+		Available: true,
+		Price: 17.99,
+		Published: t2,
+	}
+	_, err = bookTable.Save(&b2)
+	if err != nil {
+		t.Fatalf("adding record - err:%v", err)
+	}
+
+
+	t3, err := time.Parse(time.RFC3339, "1500-01-01T10:00:00Z")
+	panicOnErr(err)
+	b3 := Book{
+		Id: -1,
+		Author: "AAAA AAAA",
+		Title: "AAAA",
+		Year: 1500,
+		Available: true,
+		Price: 1.99,
+		Published: t3,
+	}
+	_, err = bookTable.Save(&b3)
+	if err != nil {
+		t.Fatalf("adding record - err:%v", err)
+	}
+
+	t4, err := time.Parse(time.RFC3339, "1200-01-01T10:00:00Z")
+	panicOnErr(err)
+	b4 := Book{
+		Id: -1,
+		Author: "BBBB BBBB",
+		Title: "BBBB",
+		Year: 1200,
+		Available: true,
+		Price: 1.99,
+		Published: t4,
+	}
+	_, err = bookTable.Save(&b4)
+	if err != nil {
+		t.Fatalf("adding record - err:%v", err)
+	}
+
+	t5, err := time.Parse(time.RFC3339, "1200-01-01T09:00:00Z")
+	panicOnErr(err)
+	b5 := Book{
+		Id: -1,
+		Author: "CCCC CCCC",
+		Title: "CCCC",
+		Year: 1200,
+		Available: true,
+		Price: 1.99,
+		Published: t5,
+	}
+	_, err = bookTable.Save(&b5)
+	if err != nil {
+		t.Fatalf("adding record - err:%v", err)
+	}
+
+	retrieved := Book{}
+	err = bookTable.Get(0, &retrieved)
+	if err != nil {
+		t.Fatalf("retrieving record - err:%v", err)
+	}
+	if !reflect.DeepEqual(b1, retrieved) {
+		t.Fatal("retrieved record differs", b1, retrieved)
+	}
+
+	err = bookTable.Get(1, &retrieved)
+	if err != nil {
+		t.Fatalf("retrieving record - err:%v", err)
+	}
+	if !reflect.DeepEqual(b2, retrieved) {
+		t.Fatal("retrieved record differs", b2, retrieved)
+	}
+
+	err = bookTable.Get(2, &retrieved)
+	if err != nil {
+		t.Fatalf("retrieving record - err:%v", err)
+	}
+	if !reflect.DeepEqual(b3, retrieved) {
+		t.Fatal("retrieved record differs", b3, retrieved)
+	}
+
+	err = bookTable.Get(3, &retrieved)
+	if err != nil {
+		t.Fatalf("retrieving record - err:%v", err)
+	}
+	if !reflect.DeepEqual(b4, retrieved) {
+		t.Fatal("retrieved record differs", b4, retrieved)
+	}
+
+	err = bookTable.Get(4, &retrieved)
+	if err != nil {
+		t.Fatalf("retrieving record - err:%v", err)
+	}
+	if !reflect.DeepEqual(b5, retrieved) {
+		t.Fatal("retrieved record differs", b5, retrieved)
+	}
+
+	err = bookTable.GetBy("Published", t1, &retrieved)
+	if err != nil {
+		t.Fatalf("retrieving record - err:%v", err)
+	}
+	if !reflect.DeepEqual(b1, retrieved) {
+		t.Fatal("retrieved record differs", b1, retrieved)
+	}
+
+	err = bookTable.GetBy("Published", t2, &retrieved)
+	if err != nil {
+		t.Fatalf("retrieving record - err:%v", err)
+	}
+	if !reflect.DeepEqual(b2, retrieved) {
+		t.Fatal("retrieved record differs", b2, retrieved)
+	}
+
+	err = bookTable.GetBy("Published", t3, &retrieved)
+	if err != nil {
+		t.Fatalf("retrieving record - err:%v", err)
+	}
+	if !reflect.DeepEqual(b3, retrieved) {
+		t.Fatal("retrieved record differs", b3, retrieved)
+	}
+
+	err = bookTable.GetBy("Published", t4, &retrieved)
+	if err != nil {
+		t.Fatalf("retrieving record - err:%v", err)
+	}
+	if !reflect.DeepEqual(b4, retrieved) {
+		t.Fatal("retrieved record differs", b4, retrieved)
+	}
+
+	err = bookTable.GetBy("Published", t5, &retrieved)
+	if err != nil {
+		t.Fatalf("retrieving record - err:%v", err)
+	}
+	if !reflect.DeepEqual(b5, retrieved) {
+		t.Fatal("retrieved record differs", b5, retrieved)
+	}
+
+	log.Printf("Elapsed: %v", time.Now().Sub(t_start))
 }
 
 func OpenTestDB(t *testing.T, options ...PureDBOptionFn) *PureDB {

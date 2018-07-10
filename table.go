@@ -3,7 +3,6 @@ package puredb
 import (
 	"reflect"
 	"fmt"
-	"log"
 	"github.com/dgraph-io/badger"
 )
 
@@ -126,6 +125,39 @@ func (table *Table) Save(v interface{}) (int64, error) {
 	}
 
 	return primaryId, nil
+}
+
+func (table *Table) Get(id int64, v interface{}) error {
+	sInfo, err := table.getStructInfo(v)
+	if err != nil {
+		return err
+	}
+
+	primary := sInfo.primary
+	//indexValuePtr := reflect.New(*primary.valueType)
+	//err = primary.bucket.Get(id, indexValuePtr.Interface())
+	return primary.bucket.Get(id, v)
+}
+
+func (table *Table) GetBy(column string, k interface{}, v interface{}) error {
+	sInfo, err := table.getStructInfo(v)
+	if err != nil {
+		return err
+	}
+
+	index, ok := sInfo.indexByName[column]
+	if !ok {
+		return NewNoSuchIndexError(column, k)
+	}
+	if !index.unique {
+		return NewIndexNotUnique(index, k)
+	}
+	id := int64(-1)
+	err = index.bucket.Get(k, &id)
+	if err != nil {
+		return err
+	}
+	return sInfo.primary.bucket.Get(id, v)
 }
 
 func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {
