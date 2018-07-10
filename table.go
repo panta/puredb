@@ -88,7 +88,29 @@ func (table *Table) Save(v interface{}) (int64, error) {
 	val := pVal.Elem()
 
 	primaryId := int64(-1)
-	//var err error
+
+	// integrity check
+	for _, index := range sInfo.indexes {
+		if ! (index.primary || index.unique) {
+			continue
+		}
+		indexValuePtr := reflect.New(*index.valueType)
+		//indexValue := indexValuePtr.Elem()
+		fieldVal := val.FieldByIndex(index.field.Index)
+		//fmt.Fprintf(os.Stderr, "checking index %v for value:%v indexValue:%v\n", index.name, fieldVal.Interface(), indexValue.Interface())
+		err = index.bucket.Get(fieldVal.Interface(), indexValuePtr.Interface())
+		switch err {
+		case badger.ErrKeyNotFound:
+			continue		// ok, field value is not present in the unique index
+
+		case nil:
+			// error, an entry is already present for this index value
+			return -1, NewDuplicateKeyError(index, fieldVal.Interface())
+
+		default:
+			return -1, err
+		}
+	}
 
 	primaryId, err = sInfo.primary.bucket.Add(v)
 	fmt.Fprintf(os.Stderr, "adding record to primary bucket v:%v id:%v err:%v\n", v, primaryId, err)
