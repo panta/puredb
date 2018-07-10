@@ -19,7 +19,7 @@ type Book struct {
 	Id			int64		`puredb:"primary,auto"`
 	Author		string
 	Title		string
-	Year		int64			`puredb:"index"`
+	Year		int			`puredb:"index,unique"`
 	Available	bool
 	Price		float64
 	Published	time.Time	`puredb:"index"`
@@ -113,10 +113,26 @@ func TestPureDB(t *testing.T) {
 	}
 
 	bookTable, err := db.AddTable("books")
-	panicOnErr(err)
+	if err != nil {
+		t.Fatalf("adding table - err:%v", err)
+	}
+
 	_, err = bookTable.Save(&b1)
-	panicOnErr(err)
+	if err != nil {
+		t.Fatalf("adding record - err:%v", err)
+	}
+
 	_, err = bookTable.Save(&b1)
+	if err != nil {
+		if _, ok := err.(*DuplicateKeyError); !ok {
+			t.Fatalf("adding duplicate - err:%v", err)
+		} else {
+			log.Printf("correctly received integrity error on duplicate\n")
+		}
+	} else {
+		t.Fatalf("no error when adding duplicate, expected integrity error")
+	}
+
 	//os.Exit(0)
 
 	err = addBook(t, db, &b1)
