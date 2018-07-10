@@ -84,7 +84,7 @@ func addBook(t *testing.T, db *PureDB, book *Book) error {
 	return nil
 }
 
-func TestPureDB(t *testing.T) {
+func TestBuckets(t *testing.T) {
 	db := OpenTestDB(t)
 	defer db.Destroy()
 
@@ -111,30 +111,6 @@ func TestPureDB(t *testing.T) {
 		Price: 12.34,
 		Published: t1,
 	}
-
-	bookTable, err := db.AddTable("books")
-	if err != nil {
-		t.Fatalf("adding table - err:%v", err)
-	}
-
-	_, err = bookTable.Save(&b1)
-	if err != nil {
-		t.Fatalf("adding record - err:%v", err)
-	}
-
-	_, err = bookTable.Save(&b1)
-	if err != nil {
-		if _, ok := err.(*DuplicateKeyError); !ok {
-			t.Fatalf("adding duplicate - err:%v", err)
-		} else {
-			log.Printf("correctly received integrity error on duplicate\n")
-		}
-	} else {
-		t.Fatalf("no error when adding duplicate, expected integrity error")
-	}
-
-	//os.Exit(0)
-
 	err = addBook(t, db, &b1)
 	panicOnErr(err)
 
@@ -206,6 +182,92 @@ func TestPureDB(t *testing.T) {
 		log.Printf("%v [%v]  key:%v  id:%v", bucket_published_id, i, key, id)
 		i++
 	}
+}
+
+func TestTables(t *testing.T) {
+	db := OpenTestDB(t)
+	defer db.Destroy()
+
+	bookTable, err := db.AddTable("books")
+	if err != nil {
+		t.Fatalf("adding table - err:%v", err)
+	}
+
+	t1, err := time.Parse(time.RFC3339, "1623-01-01T10:00:00Z")
+	panicOnErr(err)
+	b1 := Book{
+		Id: -1,
+		Author: "William Shakespeare",
+		Title: "Much Ado About Nothing",
+		Year: 1623,
+		Available: true,
+		Price: 12.34,
+		Published: t1,
+	}
+
+	_, err = bookTable.Save(&b1)
+	if err != nil {
+		t.Fatalf("adding record - err:%v", err)
+	}
+
+	_, err = bookTable.Save(&b1)
+	if err != nil {
+		if _, ok := err.(*DuplicateKeyError); !ok {
+			t.Fatalf("adding duplicate - err:%v", err)
+		} else {
+			log.Printf("correctly received integrity error on duplicate\n")
+		}
+	} else {
+		t.Fatalf("no error when adding duplicate, expected integrity error")
+	}
+
+	//t2, err := time.Parse(time.RFC3339, "1719-01-01T10:00:00Z")
+	//panicOnErr(err)
+	//b2 := Book{
+	//	Id: -1,
+	//	Author: "Daniel Defoe",
+	//	Title: "Robinson Crusoe",
+	//	Year: 1719,
+	//	Available: true,
+	//	Price: 17.99,
+	//	Published: t2,
+	//}
+	//
+	//t3, err := time.Parse(time.RFC3339, "1500-01-01T10:00:00Z")
+	//panicOnErr(err)
+	//b3 := Book{
+	//	Id: -1,
+	//	Author: "AAAA AAAA",
+	//	Title: "AAAA",
+	//	Year: 1500,
+	//	Available: true,
+	//	Price: 1.99,
+	//	Published: t3,
+	//}
+	//
+	//t4, err := time.Parse(time.RFC3339, "1200-01-01T10:00:00Z")
+	//panicOnErr(err)
+	//b4 := Book{
+	//	Id: -1,
+	//	Author: "BBBB BBBB",
+	//	Title: "BBBB",
+	//	Year: 1200,
+	//	Available: true,
+	//	Price: 1.99,
+	//	Published: t4,
+	//}
+	//
+	//t5, err := time.Parse(time.RFC3339, "1200-01-01T09:00:00Z")
+	//panicOnErr(err)
+	//b5 := Book{
+	//	Id: -1,
+	//	Author: "CCCC CCCC",
+	//	Title: "CCCC",
+	//	Year: 1200,
+	//	Available: true,
+	//	Price: 1.99,
+	//	Published: t5,
+	//}
 }
 
 func OpenTestDB(t *testing.T, options ...PureDBOptionFn) *PureDB {
