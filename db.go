@@ -84,3 +84,33 @@ func (db *PureDB) AddTable(name string) (*Table, error) {
 func (db *PureDB) GetTable(name string) *Table {
 	return db.tables.Get(name)
 }
+
+func (db *PureDB) NewReadOnlyTransaction() *Transaction {
+	return NewReadOnlyTransaction(db)
+}
+
+func (db *PureDB) NewReadWriteTransaction() *Transaction {
+	return NewReadWriteTransaction(db)
+}
+
+// View executes a function, automatically creating and managing a read-only transaction.
+// Error returned by the function is returned by View.
+func (db *PureDB) View(fn func(transaction *Transaction) error) error {
+	transaction := NewReadOnlyTransaction(db)
+	defer transaction.Discard()
+
+	return fn(transaction)
+}
+
+// Update executes a function, automatically creating and managing a read-write transaction.
+// Error returned by the function is returned by Update.
+func (db *PureDB) Update(fn func(transaction *Transaction) error) error {
+	transaction := NewReadWriteTransaction(db)
+	defer transaction.Discard()
+
+	if err := fn(transaction); err != nil {
+		return err
+	}
+
+	return transaction.Commit()
+}

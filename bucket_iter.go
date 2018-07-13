@@ -8,11 +8,12 @@ import (
 type BucketIterOpts struct {
 	Prefix		[]byte
 	Reverse		bool
+	ExternalTxn	*Transaction
 }
 type BucketIter struct {
 	bucket	*Bucket
 	prefix	[]byte
-	txn		*badger.Txn
+	txn 	*Transaction
 	it		*badger.Iterator
 	bOpts	*badger.IteratorOptions
 	Opts	BucketIterOpts
@@ -24,9 +25,12 @@ func NewBucketIter(bucket *Bucket, opts BucketIterOpts) *BucketIter {
 	bOpts.PrefetchSize = 10
 	bOpts.Reverse = opts.Reverse
 
-	db := bucket.badgerDB
-
-	txn := db.NewTransaction(false)		// read-only transaction (update set to false)
+	var txn *Transaction
+	if opts.ExternalTxn != nil {
+		txn = opts.ExternalTxn
+	} else {
+		txn = bucket.DB.NewReadOnlyTransaction()
+	}
 
 	prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
 	if len(opts.Prefix) > 0 {
@@ -40,7 +44,7 @@ func NewBucketIter(bucket *Bucket, opts BucketIterOpts) *BucketIter {
 		bucket: bucket,
 		prefix: prefix,
 		txn: txn,
-		it: txn.NewIterator(bOpts),
+		it: txn.badgerTxn.NewIterator(bOpts),
 		bOpts: &bOpts,
 		Opts: opts,
 	}
@@ -52,7 +56,9 @@ func NewBucketIter(bucket *Bucket, opts BucketIterOpts) *BucketIter {
 
 func (it *BucketIter) Close() {
 	it.it.Close()
-	it.txn.Discard()
+	if it.Opts.ExternalTxn == nil {
+		it.txn.Discard()
+	}
 }
 
 func (it *BucketIter) Rewind() {
@@ -75,6 +81,7 @@ func (it *BucketIter) Error() bool {
 	return it.Err != nil
 }
 
+// Get returns key and value at the current iterator position.
 func (it *BucketIter) Get(keyp interface{}, valuep interface{}) error {
 	item := it.it.Item()
 	k_prefixed := item.Key()
@@ -97,6 +104,17 @@ func (it *BucketIter) Get(keyp interface{}, valuep interface{}) error {
 		return err
 	}
 
+	return nil
+}
+
+// Get returns the key as a binary []byte slice at the current iterator position.
+func (it *BucketIter) GetBinaryKey(key []byte) error {
+	item := it.it.Item()
+	k_prefixed := item.Key()
+
+	k_b := k_prefixed[len(it.prefix):]
+
+	key = k_b
 	return nil
 }
 

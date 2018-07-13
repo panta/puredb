@@ -99,3 +99,32 @@ func NewIndexNotUnique(index *indexInfo, value interface{}, a ...interface{}) er
 		value: value,
 	}
 }
+
+type NotComparable struct {
+	msg		string
+	first	interface{}
+	second	interface{}
+}
+
+func (e *NotComparable) Error() string { return e.msg }
+
+func (e *NotComparable) First() interface{} { return e.first }
+func (e *NotComparable) Second() interface{} { return e.second }
+
+func NewNotComparable(first interface{}, second interface{}, a ...interface{}) error {
+	msg := ""
+	if len(a) > 0 {
+		format, ok := a[0].(string)
+		if ok && len(format) > 0 {
+			msg = fmt.Sprintf(format, a[1:]...)
+		}
+	}
+	if len(msg) == 0 {
+		msg = fmt.Sprintf("values are not comparable (first: %v second: %v)", first, second)
+	}
+	return &NotComparable{
+		msg: "not comparable - " + msg,
+		first: first,
+		second: second,
+	}
+}
