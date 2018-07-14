@@ -9,4 +9,4 @@ TODO
     * in TableIter implement TransactionManager interface with stubs (only checking for R - R/W)
     * [DONE] in TableIter create bucketIt (bucket iterators) passing ExternalTxn
 * move Bucket First(), Last(), Iterate(), Search(), SearchOne(), SearchAll() to BucketIter
-. remove TxnManager from BucketOpts ?
+. [DONE] remove TxnManager from BucketOpts ?

@@ -14,7 +14,6 @@ type BucketPredicate func(bucket *Bucket, k interface{}, v interface{}) (bool, e
 
 type BucketOpts struct {
 	PreAddFn		BucketCallback
-	TxnManager		TransactionManager
 }
 
 //type BucketInterface interface {
@@ -88,14 +87,6 @@ func (bucket *Bucket) GetName() string {
 
 func (bucket *Bucket) GetOpts() *BucketOpts {
 	return &bucket.Opts
-}
-
-func (bucket *Bucket) GetTxnManager() TransactionManager {
-	if bucket.Opts.TxnManager != nil {
-		return bucket.Opts.TxnManager
-	} else {
-		return bucket.DB
-	}
 }
 
 func (bucket *Bucket) TxnAdd(txnManager TransactionManager, v interface{}) (int64, error) {
@@ -192,26 +183,26 @@ func (bucket *Bucket) TxnDelete(txnManager TransactionManager, k interface{}) er
 }
 
 func (bucket *Bucket) Add(v interface{}) (int64, error) {
-	return bucket.TxnAdd(bucket.GetTxnManager(), v)
+	return bucket.TxnAdd(bucket.DB, v)
 }
 
 func (bucket *Bucket) Set(k interface{}, v interface{}) error {
-	return bucket.TxnSet(bucket.GetTxnManager(), k, v)
+	return bucket.TxnSet(bucket.DB, k, v)
 }
 
 func (bucket *Bucket) Get(k interface{}, v interface{}) error {
-	return bucket.TxnGet(bucket.GetTxnManager(), k, v)
+	return bucket.TxnGet(bucket.DB, k, v)
 }
 
 func (bucket *Bucket) Delete(k interface{}) error {
-	return bucket.TxnDelete(bucket.GetTxnManager(), k)
+	return bucket.TxnDelete(bucket.DB, k)
 }
 
 func (bucket *Bucket) Pop(last bool) (interface{}, interface{}, error) {
 	var k interface{}
 	var v interface{}
 
-	txnManager := bucket.GetTxnManager()
+	txnManager := bucket.DB
 	err := txnManager.Update(func(txn *Transaction) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
 
@@ -257,7 +248,7 @@ func (bucket *Bucket) Pop(last bool) (interface{}, interface{}, error) {
 }
 
 func (bucket *Bucket) Iterate(fn BucketCallback) error {
-	txnManager := bucket.GetTxnManager()
+	txnManager := bucket.DB
 	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
@@ -301,7 +292,7 @@ func (bucket *Bucket) First() (interface{}, interface{}, error) {
 	var first_k interface{}
 	var first_v interface{}
 
-	txnManager := bucket.GetTxnManager()
+	txnManager := bucket.DB
 	err := txnManager.View(func(txn *Transaction) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
 
@@ -345,7 +336,7 @@ func (bucket *Bucket) Last() (interface{}, interface{}, error) {
 	var last_k interface{}
 	var last_v interface{}
 
-	txnManager := bucket.GetTxnManager()
+	txnManager := bucket.DB
 	err := txnManager.View(func(txn *Transaction) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
 
@@ -389,7 +380,7 @@ func (bucket *Bucket) Last() (interface{}, interface{}, error) {
 func (bucket *Bucket) Search(v interface{}, fn BucketCallback) (interface{}, error) {
 	var found_at interface{}
 
-	txnManager := bucket.GetTxnManager()
+	txnManager := bucket.DB
 	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
@@ -439,7 +430,7 @@ func (bucket *Bucket) SearchOne(v interface{}, cmpFn BucketPredicate, reverse bo
 	var found_k interface{}
 	var found_v interface{}
 
-	txnManager := bucket.GetTxnManager()
+	txnManager := bucket.DB
 	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
@@ -503,7 +494,7 @@ func (bucket *Bucket) SearchAll(v interface{}, cmpFn BucketPredicate, reverse bo
 	var found_k []interface{}
 	var found_v []interface{}
 
-	txnManager := bucket.GetTxnManager()
+	txnManager := bucket.DB
 	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
@@ -568,7 +559,7 @@ func (bucket *Bucket) SearchAll(v interface{}, cmpFn BucketPredicate, reverse bo
 func (bucket *Bucket) Count() (int, error) {
 	count := 0
 
-	txnManager := bucket.GetTxnManager()
+	txnManager := bucket.DB
 	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false				// key-only iteration
@@ -591,7 +582,7 @@ func (bucket *Bucket) Count() (int, error) {
 func (bucket *Bucket) Empty() (bool, error) {
 	empty := true
 
-	txnManager := bucket.GetTxnManager()
+	txnManager := bucket.DB
 	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false				// key-only iteration
