@@ -1,7 +1,11 @@
 package puredb
 
-import "github.com/dgraph-io/badger"
+import (
+	"github.com/dgraph-io/badger"
+)
 
+// Transaction represents a transaction in the underlying storage
+// engine.
 type Transaction struct {
 	badgerTxn *badger.Txn
 	RW        bool
@@ -62,6 +66,8 @@ func (transaction *Transaction) Close() {
 	} else if transaction.RW && (!transaction.Committed) && (transaction.Err == nil) {
 		transaction.Commit()
 	}
+
+	transaction.Discard()
 }
 
 func (transaction *Transaction) Error() error {

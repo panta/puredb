@@ -114,3 +114,31 @@ func (db *PureDB) Update(fn func(transaction *Transaction) error) error {
 
 	return transaction.Commit()
 }
+
+// ViewWithNested operates like View, but passes a *NopNestedTransactionManager.
+// Since the DB is the topmost level, we embed a fresh transaction inside the NopNestedTransactionManager,
+// while the analogous ViewWithNested() method in NopNestedTransactionManager will pass on itself,
+// without creating new transactions.
+func (db *PureDB) ViewWithNested(fn func(nestedTxnMgr *NopNestedTransactionManager) error) error {
+	transaction := NewReadOnlyTransaction(db)
+	defer transaction.Discard()
+	nestedTxnMgr := &NopNestedTransactionManager{Txn: transaction}
+
+	return fn(nestedTxnMgr)
+}
+
+// UpdateWithNested operates like View, but passes a *NopNestedTransactionManager.
+// Since the DB is the topmost level, we embed a fresh transaction inside the NopNestedTransactionManager,
+// while the analogous UpdateWithNested() method in NopNestedTransactionManager will pass on itself,
+// without creating new transactions.
+func (db *PureDB) UpdateWithNested(fn func(nestedTxnMgr *NopNestedTransactionManager) error) error {
+	transaction := NewReadWriteTransaction(db)
+	defer transaction.Discard()
+	nestedTxnMgr := &NopNestedTransactionManager{Txn: transaction}
+
+	if err := fn(nestedTxnMgr); err != nil {
+		return err
+	}
+
+	return transaction.Commit()
+}

@@ -74,7 +74,7 @@ func (table *Table) GetOrCreateBucket(name string, opts BucketOpts) *Bucket {
 	return bucket
 }
 
-func (table *Table) Save(v interface{}) (int64, error) {
+func (table *Table) TxnSave(txnManager TransactionManager, v interface{}) (int64, error) {
 	sInfo, err := table.getStructInfo(v)
 	if err != nil {
 		return -1, err
@@ -85,49 +85,53 @@ func (table *Table) Save(v interface{}) (int64, error) {
 
 	primaryId := int64(-1)
 
-	// integrity check
-	for _, index := range sInfo.indexes {
-		if ! (index.primary || index.unique) {
-			continue
+	err = txnManager.UpdateWithNested(func(nestedTxnMgr *NopNestedTransactionManager) error {
+		// integrity check
+		for _, index := range sInfo.indexes {
+			if ! (index.primary || index.unique) {
+				continue
+			}
+			indexValuePtr := reflect.New(*index.valueType)
+			//indexValue := indexValuePtr.Elem()
+			fieldVal := val.FieldByIndex(index.field.Index)
+			//fmt.Fprintf(os.Stderr, "checking index %v for value:%v indexValue:%v\n", index.name, fieldVal.Interface(), indexValue.Interface())
+			err = index.bucket.TxnGet(nestedTxnMgr, fieldVal.Interface(), indexValuePtr.Interface())
+			switch err {
+			case badger.ErrKeyNotFound:
+				continue // ok, field value is not present in the unique index
+
+			case nil:
+				// error, an entry is already present for this index value
+				return NewDuplicateKeyError(index, fieldVal.Interface())
+
+			default:
+				return err
+			}
 		}
-		indexValuePtr := reflect.New(*index.valueType)
-		//indexValue := indexValuePtr.Elem()
-		fieldVal := val.FieldByIndex(index.field.Index)
-		//fmt.Fprintf(os.Stderr, "checking index %v for value:%v indexValue:%v\n", index.name, fieldVal.Interface(), indexValue.Interface())
-		err = index.bucket.Get(fieldVal.Interface(), indexValuePtr.Interface())
-		switch err {
-		case badger.ErrKeyNotFound:
-			continue		// ok, field value is not present in the unique index
 
-		case nil:
-			// error, an entry is already present for this index value
-			return -1, NewDuplicateKeyError(index, fieldVal.Interface())
-
-		default:
-			return -1, err
-		}
-	}
-
-	primaryId, err = sInfo.primary.bucket.Add(v)
-	if err != nil {
-		return -1, err
-	}
-
-	for _, index := range sInfo.indexes {
-		if index.primary {
-			continue
-		}
-		fieldVal := val.FieldByIndex(index.field.Index)
-		err = index.bucket.Set(fieldVal.Interface(), primaryId)
+		primaryId, err = sInfo.primary.bucket.TxnAdd(nestedTxnMgr, v)
 		if err != nil {
-			return -1, err
+			return err
 		}
-	}
 
-	return primaryId, nil
+		for _, index := range sInfo.indexes {
+			if index.primary {
+				continue
+			}
+			fieldVal := val.FieldByIndex(index.field.Index)
+			err = index.bucket.TxnSet(nestedTxnMgr, fieldVal.Interface(), primaryId)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	return primaryId, err
 }
 
-func (table *Table) Get(id int64, v interface{}) error {
+func (table *Table) TxnGet(txnManager TransactionManager, id int64, v interface{}) error {
 	sInfo, err := table.getStructInfo(v)
 	if err != nil {
 		return err
@@ -135,11 +139,16 @@ func (table *Table) Get(id int64, v interface{}) error {
 
 	primary := sInfo.primary
 	//indexValuePtr := reflect.New(*primary.valueType)
-	//err = primary.bucket.Get(id, indexValuePtr.Interface())
-	return primary.bucket.Get(id, v)
+
+	err = txnManager.ViewWithNested(func(nestedTxnMgr *NopNestedTransactionManager) error {
+		//err = primary.bucket.Get(id, indexValuePtr.Interface())
+		return primary.bucket.TxnGet(nestedTxnMgr, id, v)
+	})
+
+	return err
 }
 
-func (table *Table) GetBy(column string, k interface{}, v interface{}) error {
+func (table *Table) TxnGetBy(txnManager TransactionManager, column string, k interface{}, v interface{}) error {
 	sInfo, err := table.getStructInfo(v)
 	if err != nil {
 		return err
@@ -153,11 +162,27 @@ func (table *Table) GetBy(column string, k interface{}, v interface{}) error {
 		return NewIndexNotUnique(index, k)
 	}
 	id := int64(-1)
-	err = index.bucket.Get(k, &id)
-	if err != nil {
-		return err
-	}
-	return sInfo.primary.bucket.Get(id, v)
+
+	err = txnManager.ViewWithNested(func(nestedTxnMgr *NopNestedTransactionManager) error {
+		err := index.bucket.TxnGet(nestedTxnMgr, k, &id)
+		if err != nil {
+			return err
+		}
+		return sInfo.primary.bucket.TxnGet(nestedTxnMgr, id, v)
+	})
+	return err
+}
+
+func (table *Table) Save(v interface{}) (int64, error) {
+	return table.TxnSave(table.DB, v)
+}
+
+func (table *Table) Get(id int64, v interface{}) error {
+	return table.TxnGet(table.DB, id, v)
+}
+
+func (table *Table) GetBy(column string, k interface{}, v interface{}) error {
+	return table.TxnGetBy(table.DB, column, k, v)
 }
 
 func (table *Table) getStructInfo(v interface{}) (*structInfo, error) {

@@ -13,7 +13,8 @@ type BucketCallback func(bucket *Bucket, k interface{}, v interface{}) error
 type BucketPredicate func(bucket *Bucket, k interface{}, v interface{}) (bool, error)
 
 type BucketOpts struct {
-	PreAddFn         BucketCallback
+	PreAddFn		BucketCallback
+	TxnManager		TransactionManager
 }
 
 //type BucketInterface interface {
@@ -89,12 +90,18 @@ func (bucket *Bucket) GetOpts() *BucketOpts {
 	return &bucket.Opts
 }
 
-func (bucket *Bucket) Add(v interface{}) (int64, error) {
-	db := bucket.badgerDB
+func (bucket *Bucket) GetTxnManager() TransactionManager {
+	if bucket.Opts.TxnManager != nil {
+		return bucket.Opts.TxnManager
+	} else {
+		return bucket.DB
+	}
+}
 
+func (bucket *Bucket) TxnAdd(txnManager TransactionManager, v interface{}) (int64, error) {
 	var id uint64
 
-	err := db.Update(func(txn *badger.Txn) error {
+	err := txnManager.Update(func(txn *Transaction) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
 
 		num, err := bucket.Seq.Next()
@@ -117,16 +124,14 @@ func (bucket *Bucket) Add(v interface{}) (int64, error) {
 			return err
 		}
 		k_prefixed := append(prefix, k_b...)
-		return txn.Set(k_prefixed, v_b)
+		return txn.badgerTxn.Set(k_prefixed, v_b)
 	})
 
 	return int64(id), err
 }
 
-func (bucket *Bucket) Set(k interface{}, v interface{}) error {
-	db := bucket.badgerDB
-
-	err := db.Update(func(txn *badger.Txn) error {
+func (bucket *Bucket) TxnSet(txnManager TransactionManager, k interface{}, v interface{}) error {
+	err := txnManager.Update(func(txn *Transaction) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
 		k_b, err := Marshal(k)
 		if err != nil {
@@ -137,24 +142,22 @@ func (bucket *Bucket) Set(k interface{}, v interface{}) error {
 			return err
 		}
 		k_prefixed := append(prefix, k_b...)
-		return txn.Set(k_prefixed, v_b)
+		return txn.badgerTxn.Set(k_prefixed, v_b)
 	})
 
 	return err
 }
 
-func (bucket *Bucket) Get(k interface{}, v interface{}) error {
-	db := bucket.badgerDB
-
+func (bucket *Bucket) TxnGet(txnManager TransactionManager, k interface{}, v interface{}) error {
 	k_b, err := Marshal(k)
 	if err != nil {
 		return err
 	}
 
-	err = db.View(func(txn *badger.Txn) error {
+	err = txnManager.View(func(txn *Transaction) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
 		k_prefixed := append(prefix, k_b...)
-		item, err := txn.Get(k_prefixed)
+		item, err := txn.badgerTxn.Get(k_prefixed)
 		if err != nil {
 			return err
 		}
@@ -173,36 +176,49 @@ func (bucket *Bucket) Get(k interface{}, v interface{}) error {
 	return err
 }
 
-func (bucket *Bucket) Delete(k interface{}) error {
-	db := bucket.badgerDB
-
+func (bucket *Bucket) TxnDelete(txnManager TransactionManager, k interface{}) error {
 	k_b, err := Marshal(k)
 	if err != nil {
 		return err
 	}
 
-	err = db.Update(func(txn *badger.Txn) error {
+	err = txnManager.Update(func(txn *Transaction) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
 		k_prefixed := append(prefix, k_b...)
-		return txn.Delete(k_prefixed)
+		return txn.badgerTxn.Delete(k_prefixed)
 	})
 
 	return err
 }
 
-func (bucket *Bucket) Pop(last bool) (interface{}, interface{}, error) {
-	db := bucket.badgerDB
+func (bucket *Bucket) Add(v interface{}) (int64, error) {
+	return bucket.TxnAdd(bucket.GetTxnManager(), v)
+}
 
+func (bucket *Bucket) Set(k interface{}, v interface{}) error {
+	return bucket.TxnSet(bucket.GetTxnManager(), k, v)
+}
+
+func (bucket *Bucket) Get(k interface{}, v interface{}) error {
+	return bucket.TxnGet(bucket.GetTxnManager(), k, v)
+}
+
+func (bucket *Bucket) Delete(k interface{}) error {
+	return bucket.TxnDelete(bucket.GetTxnManager(), k)
+}
+
+func (bucket *Bucket) Pop(last bool) (interface{}, interface{}, error) {
 	var k interface{}
 	var v interface{}
 
-	err := db.Update(func(txn *badger.Txn) error {
+	txnManager := bucket.GetTxnManager()
+	err := txnManager.Update(func(txn *Transaction) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
 
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 1
 		opts.Reverse = last
-		it := txn.NewIterator(opts)
+		it := txn.badgerTxn.NewIterator(opts)
 		defer it.Close()
 
 		if last {
@@ -234,19 +250,18 @@ func (bucket *Bucket) Pop(last bool) (interface{}, interface{}, error) {
 			return err
 		}
 
-		return txn.Delete(k_prefixed)
+		return txn.badgerTxn.Delete(k_prefixed)
 	})
 
 	return k, v, err
 }
 
 func (bucket *Bucket) Iterate(fn BucketCallback) error {
-	db := bucket.badgerDB
-
-	err := db.View(func(txn *badger.Txn) error {
+	txnManager := bucket.GetTxnManager()
+	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
-		it := txn.NewIterator(opts)
+		it := txn.badgerTxn.NewIterator(opts)
 		defer it.Close()
 
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
@@ -283,17 +298,16 @@ func (bucket *Bucket) Iterate(fn BucketCallback) error {
 }
 
 func (bucket *Bucket) First() (interface{}, interface{}, error) {
-	db := bucket.badgerDB
-
 	var first_k interface{}
 	var first_v interface{}
 
-	err := db.View(func(txn *badger.Txn) error {
+	txnManager := bucket.GetTxnManager()
+	err := txnManager.View(func(txn *Transaction) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
 
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 1
-		it := txn.NewIterator(opts)
+		it := txn.badgerTxn.NewIterator(opts)
 		defer it.Close()
 
 		it.Seek(prefix)
@@ -328,18 +342,17 @@ func (bucket *Bucket) First() (interface{}, interface{}, error) {
 }
 
 func (bucket *Bucket) Last() (interface{}, interface{}, error) {
-	db := bucket.badgerDB
-
 	var last_k interface{}
 	var last_v interface{}
 
-	err := db.View(func(txn *badger.Txn) error {
+	txnManager := bucket.GetTxnManager()
+	err := txnManager.View(func(txn *Transaction) error {
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
 
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 1
 		opts.Reverse = true
-		it := txn.NewIterator(opts)
+		it := txn.badgerTxn.NewIterator(opts)
 		defer it.Close()
 
 		it.Seek(prefixBeyondEnd(prefix))
@@ -374,14 +387,13 @@ func (bucket *Bucket) Last() (interface{}, interface{}, error) {
 }
 
 func (bucket *Bucket) Search(v interface{}, fn BucketCallback) (interface{}, error) {
-	db := bucket.badgerDB
-
 	var found_at interface{}
 
-	err := db.View(func(txn *badger.Txn) error {
+	txnManager := bucket.GetTxnManager()
+	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
-		it := txn.NewIterator(opts)
+		it := txn.badgerTxn.NewIterator(opts)
 		defer it.Close()
 
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
@@ -424,16 +436,15 @@ func (bucket *Bucket) Search(v interface{}, fn BucketCallback) (interface{}, err
 //	SearchAll(cmpFn BucketPredicate, reverse bool) ([]interface{}, []interface{}, error)
 
 func (bucket *Bucket) SearchOne(v interface{}, cmpFn BucketPredicate, reverse bool) (interface{}, interface{}, error) {
-	db := bucket.badgerDB
-
 	var found_k interface{}
 	var found_v interface{}
 
-	err := db.View(func(txn *badger.Txn) error {
+	txnManager := bucket.GetTxnManager()
+	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
 		opts.Reverse = reverse
-		it := txn.NewIterator(opts)
+		it := txn.badgerTxn.NewIterator(opts)
 		defer it.Close()
 
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
@@ -489,16 +500,15 @@ func (bucket *Bucket) SearchOne(v interface{}, cmpFn BucketPredicate, reverse bo
 }
 
 func (bucket *Bucket) SearchAll(v interface{}, cmpFn BucketPredicate, reverse bool) ([]interface{}, []interface{}, error) {
-	db := bucket.badgerDB
-
 	var found_k []interface{}
 	var found_v []interface{}
 
-	err := db.View(func(txn *badger.Txn) error {
+	txnManager := bucket.GetTxnManager()
+	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
 		opts.Reverse = reverse
-		it := txn.NewIterator(opts)
+		it := txn.badgerTxn.NewIterator(opts)
 		defer it.Close()
 
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
@@ -556,14 +566,13 @@ func (bucket *Bucket) SearchAll(v interface{}, cmpFn BucketPredicate, reverse bo
 //	// Empty
 
 func (bucket *Bucket) Count() (int, error) {
-	db := bucket.badgerDB
-
 	count := 0
 
-	err := db.View(func(txn *badger.Txn) error {
+	txnManager := bucket.GetTxnManager()
+	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false				// key-only iteration
-		it := txn.NewIterator(opts)
+		it := txn.badgerTxn.NewIterator(opts)
 		defer it.Close()
 
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))
@@ -580,14 +589,13 @@ func (bucket *Bucket) Count() (int, error) {
 }
 
 func (bucket *Bucket) Empty() (bool, error) {
-	db := bucket.badgerDB
-
 	empty := true
 
-	err := db.View(func(txn *badger.Txn) error {
+	txnManager := bucket.GetTxnManager()
+	err := txnManager.View(func(txn *Transaction) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false				// key-only iteration
-		it := txn.NewIterator(opts)
+		it := txn.badgerTxn.NewIterator(opts)
 		defer it.Close()
 
 		prefix := []byte(fmt.Sprintf("%s__", bucket.GetName()))

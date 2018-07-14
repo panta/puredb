@@ -1,0 +1,12 @@
+TODO
+====
+
+* [DONE] add TransactionManager and documentation
+* [DONE] in Table use Bucket TxnGet, TxnSet, TxnAdd instead of non-Txn versions
+* [DONE] in Table add Txn* versions of Save(), Get(), GetBy(), ...
+* [DONE] in TableIter use Bucket TxnGet, TxnSet, TxnAdd instead of non-Txn versions
+    * [DONE] in TableIter change txn field (badger.Txn) to Txn (Transaction)
+    * in TableIter implement TransactionManager interface with stubs (only checking for R - R/W)
+    * [DONE] in TableIter create bucketIt (bucket iterators) passing ExternalTxn
+* move Bucket First(), Last(), Iterate(), Search(), SearchOne(), SearchAll() to BucketIter
+. remove TxnManager from BucketOpts ?

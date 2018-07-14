@@ -1,7 +1,6 @@
 package puredb
 
 import (
-	"github.com/dgraph-io/badger"
 	"reflect"
 	"bytes"
 )
@@ -17,6 +16,7 @@ type TableIterOpts struct {
 	End			interface{}
 	Reverse		bool
 }
+
 type TableIter struct {
 	Table		*Table
 	Column		string
@@ -28,22 +28,21 @@ type TableIter struct {
 	Reverse 	bool
 	prefix		[]byte
 
-	txn			*badger.Txn
-	index		*indexInfo
-	bucketIt	*BucketIter
+	Txn      *Transaction
+	txnMgr	 *NopNestedTransactionManager
+	index    *indexInfo
+	bucketIt *BucketIter
 }
 
 
 func NewTableIter(table *Table, column string, options ...TableIterOptionFn) (*TableIter, error) {
-	db := table.badgerDB
-
-	txn := db.NewTransaction(false)		// read-only transaction (update set to false)
-
+	txn := table.DB.NewReadOnlyTransaction()
 	it := TableIter{
-		Table: table,
-		Column: column,
-		txn: txn,
-		KeyFn: tableIterKeyAllCb,
+		Table:   table,
+		Column:  column,
+		Txn:     txn,
+		txnMgr:	 &NopNestedTransactionManager{Txn: txn},
+		KeyFn:   tableIterKeyAllCb,
 		ValueFn: tableIterValueAllCb,
 	}
 
@@ -64,6 +63,7 @@ func NewTableIter(table *Table, column string, options ...TableIterOptionFn) (*T
 	it.bucketIt = NewBucketIter(index.bucket, BucketIterOpts{
 		Prefix: it.prefix,
 		Reverse: it.Reverse,
+		ExternalTxn: it.Txn,
 	})
 
 	it.Rewind()
@@ -73,7 +73,7 @@ func NewTableIter(table *Table, column string, options ...TableIterOptionFn) (*T
 
 func (it *TableIter) Close() {
 	it.bucketIt.Close()
-	it.txn.Discard()
+	it.Txn.Close()
 }
 
 func (it *TableIter) Rewind() {
@@ -107,7 +107,7 @@ func (it *TableIter) Get(keyp interface{}, valuep interface{}) error {
 			return err
 		}
 
-		return it.Table.structInfo.primary.bucket.Get(id, valuep)
+		return it.Table.structInfo.primary.bucket.TxnGet(it.txnMgr, id, valuep)
 	}
 }
 
@@ -157,7 +157,7 @@ func (it *TableIter) Iterate(keyPtr interface{}, valuePtr interface{}, cmpFn Tab
 				}
 
 				// get record
-				err = it.Table.structInfo.primary.bucket.Get(id, valuePtr)
+				err = it.Table.structInfo.primary.bucket.TxnGet(it.txnMgr, id, valuePtr)
 				if err != nil {
 					return false, err
 				}
@@ -222,7 +222,7 @@ func (it *TableIter) Find(idPtr *int64, valuePtr interface{}, foundFn TableIterV
 				*idPtr = id
 
 				// get record
-				err = it.Table.structInfo.primary.bucket.Get(id, valuePtr)
+				err = it.Table.structInfo.primary.bucket.TxnGet(it.txnMgr, id, valuePtr)
 				if err != nil {
 					return false, err
 				}
