@@ -100,9 +100,10 @@ func (it *TableIter) Get(keyp interface{}, valuep interface{}) error {
 	if it.index.primary {
 		return it.bucketIt.Get(keyp, valuep)
 	} else {
-		keyp := reflect.New(it.index.field.Type)
+		//keypVal := reflect.New(it.index.field.Type)
 		id := int64(-1)
 		err := it.bucketIt.Get(keyp, &id)
+		//err := it.bucketIt.Get(keypVal.Interface(), &id)
 		if err != nil {
 			return err
 		}
