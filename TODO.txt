@@ -10,3 +10,9 @@ TODO
     * [DONE] in TableIter create bucketIt (bucket iterators) passing ExternalTxn
 * move Bucket First(), Last(), Iterate(), Search(), SearchOne(), SearchAll() to BucketIter
 . [DONE] remove TxnManager from BucketOpts ?
+
+* add tests for TableIter
+* add tests for Table Get(), GetBy()
+* add incremental suffix to non-unique indices
+* rename DB.AddTable() to DB.Table()
+* rename DB.AddBucket() to DB.Bucket()
