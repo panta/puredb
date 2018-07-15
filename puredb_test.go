@@ -182,6 +182,7 @@ func TestBuckets(t *testing.T) {
 		log.Printf("%v [%v]  key:%v  id:%v", bucket_published_id, i, key, id)
 		i++
 	}
+	it.Close()
 }
 
 func TestTables(t *testing.T) {
